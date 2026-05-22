@@ -109,10 +109,15 @@ export LEMONADE_BASE_URL="http://127.0.0.1:13305/api/v1"
 export LEMONADE_MODEL="Qwen3.6-35B-A3B-GGUF"
 export AGENT_CANVAS_URL="http://localhost:8000"
 export AUTOMATION_API_URL="http://localhost:8000/api/automation"
-export GITHUB_REPO_FILTER="your-org/*"
+export GITHUB_REPO_FILTER="your-org/your-repo"
 export SLACK_DIGEST_CHANNEL="C0123456789"
 export DIGEST_TIMEZONE="America/New_York"
 ```
+
+Prefer an explicit `owner/repo` or a short, bounded list of repositories for
+local Lemonade-backed runs. Broad organization wildcards can return too much
+MCP context for smaller local model context windows.
+
 
 For a remote OpenHands or cloud automation environment, replace
 `LEMONADE_BASE_URL` with a reachable HTTPS tunnel URL, for example:
@@ -352,7 +357,7 @@ backend URL from the <RUNTIME_SERVICES> block, and use the /api/automation/v1/pr
 path on that backend. The automation should:
 
 1. Run every weekday at 9:00 AM in America/New_York.
-2. Use the GitHub MCP server to inspect recent development activity from repositories matching "your-org/*".
+2. Use the GitHub MCP server to inspect recent development activity from repositories matching "your-org/your-repo". Prefer explicit repositories or a short bounded list over broad organization wildcards when using a local Lemonade model.
 3. Summarize activity from the previous weekday, including:
    - merged pull requests
    - newly opened or reopened pull requests
@@ -501,6 +506,15 @@ Use a Slack channel ID, not a channel name, in `SLACK_DIGEST_CHANNEL`, and set
 `SLACK_CHANNEL_IDS` on the Slack MCP server to that same ID. This prevents the
 agent from paging through large Slack workspaces while trying to resolve the
 posting destination.
+
+### Automation Fails with `exceed_context_size_error`
+
+Local models may have smaller effective context windows than hosted models. If
+an automation fails after large MCP responses or repeated tool retries, narrow
+`GITHUB_REPO_FILTER` to explicit repositories, reduce the requested lookback
+window, and keep `SLACK_CHANNEL_IDS` set so Slack MCP calls stay bounded. Avoid
+broad organization-wide repository searches unless your local model and MCP
+responses are known to fit in context.
 
 ### Automation Creation Fails with 401
 
