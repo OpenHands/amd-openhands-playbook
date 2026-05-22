@@ -260,6 +260,8 @@ Select **OpenHands**. This route uses the Agent Server LLM configuration you
 will point at Lemonade. The other agent choices are ACP subprocess agents and
 manage their own model settings.
 
+![Agent Canvas onboarding screen with OpenHands selected](screenshots/01-onboarding-choose-agent.png)
+
 ### Check Backend
 
 Confirm the local Agent Server is connected. If you used the default launcher,
@@ -270,6 +272,8 @@ http://localhost:8000
 ```
 
 Click **Next** only after the connection banner reports success.
+
+![Agent Canvas onboarding backend connection success](screenshots/02-onboarding-backend-connected.png)
 
 ### Set Up LLM
 
@@ -297,12 +301,16 @@ https://YOUR_NGROK_DOMAIN.ngrok-free.dev/api/v1
 
 Click **Next** to save the LLM profile.
 
+![Agent Canvas LLM profile configured for Lemonade](screenshots/03-llm-profile-configured.png)
+
 ### Say Hello
 
 Send the default hello message or continue directly to the recommended
 automation cards. The final onboarding step also contains recommended
 automations; for this playbook, you will create a custom GitHub-to-Slack digest
 in the next sections.
+
+![Agent Canvas home after onboarding](screenshots/05-agent-canvas-home.png)
 
 ## 5. Install GitHub and Slack MCP Servers
 
@@ -335,6 +343,8 @@ these stdio servers:
 recommended for this playbook. It limits channel listing to the digest channel
 and prevents the agent from paging through a large Slack workspace just to find
 where to post.
+
+![Agent Canvas MCP page with GitHub and Slack servers installed](screenshots/04-mcp-servers-installed.png)
 
 After installing the Slack server, invite the Slack app to the channel where
 you want the digest posted.
@@ -388,6 +398,8 @@ Use a timeout of 900 seconds.
 The agent should create the automation through the prompt preset, then return
 the new automation ID and a short description of the configured trigger.
 
+![Agent Canvas automation detail after creation](screenshots/06-automation-created.png)
+
 ### API Equivalent
 
 If you prefer to create the automation directly, use the local automation API.
@@ -438,6 +450,10 @@ curl -sS "${AUTOMATION_API_URL}/v1/${AUTOMATION_ID}/runs?limit=5" \
 
 You should see a run transition from queued or running to completed. Check the
 target Slack channel for a digest message.
+
+![Agent Canvas automation run completed successfully](screenshots/08-automation-run-completed.png)
+
+![Slack channel showing the generated OpenHands digest](screenshots/09-slackbot-message.png)
 
 ## 8. Tune the Digest
 
@@ -518,6 +534,8 @@ an automation fails after large MCP responses or repeated tool retries, narrow
 window, and keep `SLACK_CHANNEL_IDS` set so Slack MCP calls stay bounded. Avoid
 broad organization-wide repository searches unless your local model and MCP
 responses are known to fit in context.
+
+![Agent Canvas automation run interrupted after a failed test](screenshots/07-automation-run-interrupted.png)
 
 For prompt-based automations, create a new automation after changing a broad
 repository filter to a narrow one. The generated prompt automation workspace can
