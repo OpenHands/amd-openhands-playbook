@@ -15,16 +15,18 @@ SPDX-License-Identifier: MIT
 
 ## Overview
 
-Engineering teams often have useful activity spread across pull requests,
-issues, releases, and commit history. A short Slack digest turns that stream of
-updates into a daily or weekly summary that is easier to scan than a long list of
-notifications.
+OpenHands automations turn recurring engineering workflows into scheduled or
+event-driven agent runs. With Agent Canvas, an automation can combine MCP
+servers, local tools, and an LLM profile to gather context, reason over it, and
+take action without a developer manually repeating the same steps.
 
-This playbook teaches you how to connect Agent Canvas to a local Lemonade Server
-model and create an OpenHands automation that posts a concise GitHub activity
-digest to Slack. Because the model runs locally through Lemonade's
-OpenAI-compatible API, the source activity summary and prompt stay on your own
-AMD system.
+This playbook uses a GitHub-to-Slack digest as one concrete example of that
+broader automation pattern: connect the data sources the agent needs, give it
+focused instructions, and let OpenHands run the workflow on a schedule. You can
+adapt the same approach for status reports, issue triage, release checks, or any
+other repeatable workflow that benefits from agent reasoning. Because the model
+runs locally through Lemonade's OpenAI-compatible API, the workflow context and
+prompt stay on your own AMD system.
 
 ![Architecture diagram showing GitHub MCP, OpenHands automation, Lemonade Server, and Slack MCP](screenshots/00-architecture-overview.png)
 
