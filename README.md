@@ -78,22 +78,25 @@ You also need:
   specific write permissions it needs.
 - A Slack app bot token that starts with `xoxb-`.
 - A Slack workspace/team ID that starts with `T`.
-- A Slack channel ID or channel name where the digest should be posted.
+- A Slack channel ID where the digest should be posted. Channel names work in
+  small workspaces, but channel IDs are more reliable and avoid forcing the
+  agent to enumerate every channel.
 - Agent Canvas running with the automation stack enabled.
 
 For the Slack MCP server, the common bot token scopes are:
 
-- `channels:history`
 - `channels:read`
 - `chat:write`
-- `reactions:write`
 - `users:read`
 - `users.profile:read`
 
-If you want to summarize private Slack channels, add the corresponding private
-channel scopes and invite the Slack app to those channels. For a GitHub-only
-development digest, the automation does not need to read Slack history; Slack is
-only the reporting destination.
+If the bot is not already a member of the target public channel, either invite
+it with `/invite @YOUR_APP_NAME` in Slack or add `channels:join` so it can join
+that channel programmatically. If you want to summarize or post into private
+Slack channels, add the corresponding private-channel scopes, such as
+`groups:read` and `groups:history`, and invite the Slack app to those channels.
+For a GitHub-only development digest, the automation does not need to read Slack
+history; Slack is only the reporting destination.
 
 ## Variables Used in This Playbook
 
@@ -107,7 +110,7 @@ export LEMONADE_MODEL="Qwen3.6-35B-A3B-GGUF"
 export AGENT_CANVAS_URL="http://localhost:8000"
 export AUTOMATION_API_URL="http://localhost:8000/api/automation"
 export GITHUB_REPO_FILTER="your-org/*"
-export SLACK_DIGEST_CHANNEL="#eng-digest"
+export SLACK_DIGEST_CHANNEL="C0123456789"
 export DIGEST_TIMEZONE="America/New_York"
 ```
 
@@ -271,7 +274,11 @@ Open the advanced or all-settings view in the LLM step and use:
 | --- | --- |
 | Custom model | `openai/Qwen3.6-35B-A3B-GGUF` |
 | Base URL | `http://127.0.0.1:13305/api/v1` |
-| API key | `lemonade` |
+| API key | `lemonade` for an unauthenticated local server, or the value of `LEMONADE_API_KEY` if your Lemonade endpoint requires a key |
+
+The onboarding form may be pre-filled with a hosted model. Replace that model
+with the `openai/...` Lemonade model in the advanced view before clicking
+**Next**.
 
 Why the `openai/` prefix? Agent Canvas talks to local OpenAI-compatible
 servers through LiteLLM. The prefix tells LiteLLM to use OpenAI-compatible
@@ -301,20 +308,28 @@ Slack. Open the MCP directory:
 http://localhost:8000/mcp
 ```
 
-Install **GitHub** from the marketplace:
+Install **GitHub** and **Slack** from the marketplace when possible. The
+marketplace cards may use the current recommended commands, such as the GitHub
+MCP Docker image or a maintained Slack MCP package.
 
-| Field | Value |
-| --- | --- |
-| Command | `npx -y @modelcontextprotocol/server-github` |
-| Personal access token | Your GitHub token |
+If you prefer a no-Docker custom setup, click **Add custom server** and add
+these stdio servers:
 
-Install **Slack** from the marketplace:
+| Server | Field | Value |
+| --- | --- | --- |
+| GitHub | Command | `npx` |
+| GitHub | Arguments | `-y @modelcontextprotocol/server-github` |
+| GitHub | Environment | `GITHUB_PERSONAL_ACCESS_TOKEN=YOUR_GITHUB_TOKEN` |
+| Slack | Command | `npx` |
+| Slack | Arguments | `-y @modelcontextprotocol/server-slack` |
+| Slack | Environment | `SLACK_BOT_TOKEN=xoxb-...` |
+| Slack | Environment | `SLACK_TEAM_ID=T...` |
+| Slack | Environment | `SLACK_CHANNEL_IDS=C0123456789` |
 
-| Field | Value |
-| --- | --- |
-| Command | `npx -y @modelcontextprotocol/server-slack` |
-| Bot token | Your `xoxb-...` Slack bot token |
-| Team / Workspace ID | Your `T...` Slack workspace ID |
+`SLACK_CHANNEL_IDS` is optional for the Slack MCP server, but it is strongly
+recommended for this playbook. It limits channel listing to the digest channel
+and prevents the agent from paging through a large Slack workspace just to find
+where to post.
 
 After installing the Slack server, invite the Slack app to the channel where
 you want the digest posted.
@@ -345,14 +360,15 @@ path on that backend. The automation should:
    - new issues and high-priority issue updates
    - releases or tags
    - risks, blockers, and review requests that need attention
-4. Use the Slack MCP server to post the digest to #eng-digest.
+4. Use the Slack MCP server to post the digest to channel ID C0123456789.
 5. Keep the Slack post concise:
    - title with date range
    - 3 to 7 bullets of meaningful changes
    - "Needs attention" section only when there are blockers
    - links back to GitHub PRs, issues, commits, and releases
-6. Do not include secrets, raw tokens, private environment variables, or unrelated Slack messages.
-7. If GitHub returns too much activity, prioritize merged PRs, releases, and items labeled bug, security, release, or blocker.
+6. Include this note at the end: "This digest was generated by an AI agent (OpenHands) on behalf of the user."
+7. Do not include secrets, raw tokens, private environment variables, or unrelated Slack messages.
+8. If GitHub returns too much activity, prioritize merged PRs, releases, and items labeled bug, security, release, or blocker.
 
 Use this trigger:
 {
@@ -381,7 +397,7 @@ curl -sS -X POST "${AUTOMATION_API_URL}/v1/preset/prompt" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "GitHub Development Digest to Slack",
-    "prompt": "Use the GitHub MCP server to inspect recent development activity from repositories matching '"${GITHUB_REPO_FILTER}"' since the previous weekday. Summarize merged pull requests, new or reopened pull requests, notable commits pushed to main or release branches, new issues, important issue updates, releases, risks, blockers, and review requests. Use the Slack MCP server to post a concise digest to '"${SLACK_DIGEST_CHANNEL}"'. Include a title with the date range, 3 to 7 meaningful bullets, a Needs attention section only when needed, and links back to GitHub. Do not include secrets, raw tokens, private environment variables, or unrelated Slack messages.",
+    "prompt": "Use the GitHub MCP server to inspect recent development activity from repositories matching '"${GITHUB_REPO_FILTER}"' since the previous weekday. Summarize merged pull requests, new or reopened pull requests, notable commits pushed to main or release branches, new issues, important issue updates, releases, risks, blockers, and review requests. Use the Slack MCP server to post a concise digest to channel ID '"${SLACK_DIGEST_CHANNEL}"'. Include a title with the date range, 3 to 7 meaningful bullets, a Needs attention section only when needed, and links back to GitHub. Include this note at the end: This digest was generated by an AI agent (OpenHands) on behalf of the user. Do not include secrets, raw tokens, private environment variables, or unrelated Slack messages.",
     "trigger": {
       "type": "cron",
       "schedule": "0 9 * * 1-5",
@@ -472,8 +488,19 @@ unless the automation must write comments or update issues.
 ### Slack MCP Can Read Channels but Cannot Post
 
 Confirm the Slack bot has `chat:write`, is installed to the workspace, and is
-invited to the target channel. If the channel is private, the app must be added
-to that private channel and have the corresponding private-channel scopes.
+invited to the target channel. If the bot is not a member of a public channel,
+invite it in Slack with `/invite @YOUR_APP_NAME`. Alternatively, add
+`channels:join` and join the channel through the Slack API, or add
+`chat:write.public` if your workspace allows apps to post to public channels
+without joining. If the channel is private, the app must be added to that
+private channel and have the corresponding private-channel scopes.
+
+### Automation Gets Stuck Listing Slack Channels
+
+Use a Slack channel ID, not a channel name, in `SLACK_DIGEST_CHANNEL`, and set
+`SLACK_CHANNEL_IDS` on the Slack MCP server to that same ID. This prevents the
+agent from paging through large Slack workspaces while trying to resolve the
+posting destination.
 
 ### Automation Creation Fails with 401
 
