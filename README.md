@@ -15,16 +15,18 @@ SPDX-License-Identifier: MIT
 
 ## Overview
 
-In this playbook, you will connect Agent Canvas to a local Lemonade Server model
-and create an OpenHands automation that posts a concise GitHub activity digest to
-Slack.
+Engineering teams often have useful activity spread across pull requests,
+issues, releases, and commit history. A short Slack digest turns that stream of
+updates into a daily or weekly summary that is easier to scan than a long list of
+notifications.
 
-```text
-GitHub repo -> GitHub MCP -> OpenHands automation -> Slack MCP -> Slack channel
-                         ^
-                         |
-                  Lemonade Server
-```
+This playbook teaches you how to connect Agent Canvas to a local Lemonade Server
+model and create an OpenHands automation that posts a concise GitHub activity
+digest to Slack. Because the model runs locally through Lemonade's
+OpenAI-compatible API, the source activity summary and prompt stay on your own
+AMD system.
+
+![Architecture diagram showing GitHub MCP, OpenHands automation, Lemonade Server, and Slack MCP](screenshots/00-architecture-overview.png)
 
 <!-- @device:stx,krk -->
 > [!NOTE]
