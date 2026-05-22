@@ -444,7 +444,10 @@ target Slack channel for a digest message.
 After the first run, adjust the automation prompt if the digest is too long,
 too short, or missing important context. Good prompt refinements include:
 
-- Narrow the repository filter from `your-org/*` to a small allowlist.
+- Narrow the repository filter to an explicit repository such as
+  `your-org/your-repo`, or to a very small allowlist.
+- Cap each GitHub lookup to a small result set, such as the latest 3 to 5
+  commits, PRs, issues, or releases, when running against a local model.
 - Add label priorities, such as `security`, `release`, `blocker`, or `customer`.
 - Exclude noisy bot activity such as dependency update branches.
 - Ask for a separate section for "merged", "in review", and "needs attention".
@@ -515,6 +518,11 @@ an automation fails after large MCP responses or repeated tool retries, narrow
 window, and keep `SLACK_CHANNEL_IDS` set so Slack MCP calls stay bounded. Avoid
 broad organization-wide repository searches unless your local model and MCP
 responses are known to fit in context.
+
+For prompt-based automations, create a new automation after changing a broad
+repository filter to a narrow one. The generated prompt automation workspace can
+retain the original prompt text used at creation time, so patching only the
+metadata may not update the prompt executed by future dispatches.
 
 ### Automation Creation Fails with 401
 
