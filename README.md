@@ -15,11 +15,12 @@ SPDX-License-Identifier: MIT
 
 ## Overview
 
-Automations are useful whenever a team repeats the same context-gathering,
-decision, and notification loop: checking activity, summarizing changes,
-triaging issues, monitoring health signals, or posting updates. They reduce
-manual polling, make handoffs more consistent, and let important work run on a
-schedule or in response to events.
+Software engineering is full of repetitive tasks that still require context,
+judgment, and careful follow-through. Automations are useful whenever a team
+repeats the same context-gathering, decision, and notification loop: checking
+activity, summarizing changes, triaging issues, monitoring health signals, or
+posting updates. They reduce manual polling, make handoffs more consistent, and
+let important work run on a schedule or in response to events.
 
 [OpenHands automations](https://docs.openhands.dev/openhands/usage/automations/overview)
 run these workflows as full agent conversations with access to your configured
