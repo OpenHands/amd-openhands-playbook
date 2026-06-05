@@ -11,17 +11,18 @@ SPDX-License-Identifier: MIT
 > OS, variable, or hidden-test directives.
 <!-- @github-only:end -->
 
-# Build a GitHub-to-Slack Development Digest with Agent Canvas and Lemonade
+# Build a GitHub-to-Slack Development Digest with Agent Canvas and a Local LLM
 
 ## Overview
 
-In this playbook, you will run a local LLM with Lemonade Server, connect Agent
-Canvas to that local OpenAI-compatible endpoint, and create an automation that
-summarizes recent GitHub development activity into a Slack digest.
+In this playbook, you will run a local LLM with Lemonade Server or SGLang,
+connect Agent Canvas to that local OpenAI-compatible endpoint, and create an
+automation that summarizes recent GitHub development activity into a Slack
+digest.
 
 The workflow is intentionally local-first:
 
-1. Lemonade Server hosts the model on your AMD system.
+1. Lemonade Server or SGLang hosts the model on your AMD system.
 2. Agent Canvas uses that model through the same `/api/v1` OpenAI-compatible
    interface that cloud LLM clients use.
 3. OpenHands Automations runs a scheduled task that reads GitHub activity and
@@ -40,6 +41,7 @@ model prompt or repository summary to a hosted LLM provider.
 ## What You'll Learn
 
 - How to start and verify Lemonade Server as a local LLM endpoint.
+- How to start SGLang with grammar-constrained OpenAI tool calling.
 - How to configure Agent Canvas through its onboarding flow.
 - How to install GitHub and Slack MCP servers.
 - How to create a scheduled automation with the prompt preset API.
@@ -54,7 +56,7 @@ GitHub repos  --->  GitHub MCP  ----+
                               OpenHands automation
                                     |
                                     v
-Lemonade Server  <--- Agent Server / Agent Canvas ---> Slack MCP ---> Slack channel
+Local LLM server <--- Agent Server / Agent Canvas ---> Slack MCP ---> Slack channel
 ```
 
 The automation itself is created from a natural-language prompt. The prompt
@@ -104,6 +106,8 @@ only the reporting destination.
 ```bash
 export LEMONADE_BASE_URL="http://127.0.0.1:13305/api/v1"
 export LEMONADE_MODEL="Qwen3.6-35B-A3B-GGUF"
+export SGLANG_BASE_URL="http://127.0.0.1:13306/v1"
+export SGLANG_MODEL="adp-qwen35-4b-flashattn-ckpt1000"
 export AGENT_CANVAS_URL="http://localhost:8000"
 export AUTOMATION_API_URL="http://localhost:8000/api/automation"
 export GITHUB_REPO_FILTER="your-org/*"
@@ -121,6 +125,10 @@ export LEMONADE_BASE_URL="https://YOUR_NGROK_DOMAIN.ngrok-free.dev/api/v1"
 The current local development setup this playbook was modeled from serves
 Lemonade on `127.0.0.1:13305`, with the loaded model
 `Qwen3.6-35B-A3B-GGUF`, a llama.cpp Vulkan backend, and a 65,536-token context.
+
+If you use SGLang instead of Lemonade, this playbook was also verified with
+SGLang on `127.0.0.1:13306`, serving
+`adp-qwen35-4b-flashattn-ckpt1000` with a 32,768-token context.
 
 ## 1. Start Lemonade Server
 
@@ -154,6 +162,91 @@ ngrok http 13305 --url YOUR_NGROK_DOMAIN.ngrok-free.dev
 ```
 
 Use the HTTPS tunnel URL as the Agent Canvas LLM base URL in later steps.
+
+### Optional: Use SGLang for Grammar-Constrained Tool Calls
+
+SGLang is a better fit when the automation depends heavily on OpenAI `tools`.
+Launch SGLang with an explicit grammar backend, Qwen reasoning parser, Qwen
+tool-call parser, and strict tool decoding:
+
+```bash
+cd ~/work/sglang
+source ~/.venvs/sglang-rocm/bin/activate
+
+export SGLANG_TOOL_STRICT_LEVEL=2
+export HIP_VISIBLE_DEVICES=0
+export PYTHONPATH="$HOME/work/sglang/python:${PYTHONPATH:-}"
+
+python -u -m sglang.launch_server \
+  --model-path "$HOME/work/models/adp-qwen35-4b-flashattn-ckpt1000" \
+  --host 127.0.0.1 \
+  --port 13306 \
+  --served-model-name "${SGLANG_MODEL}" \
+  --dtype bfloat16 \
+  --context-length 32768 \
+  --max-total-tokens 32768 \
+  --max-running-requests 1 \
+  --mem-fraction-static 0.75 \
+  --attention-backend torch_native \
+  --grammar-backend xgrammar \
+  --reasoning-parser qwen3 \
+  --tool-call-parser qwen \
+  --disable-cuda-graph \
+  --disable-custom-all-reduce
+```
+
+Verify the OpenAI-compatible endpoint:
+
+```bash
+curl -fsS "${SGLANG_BASE_URL}/models" | python3 -m json.tool
+```
+
+Then verify parsed OpenAI tool calls. The `chat_template_kwargs` field is
+important for this Qwen3-style checkpoint: without `enable_thinking: false`,
+SGLang can return a grammar-constrained tagged call in `reasoning_content`
+instead of populating `message.tool_calls`.
+
+```bash
+curl -fsS "${SGLANG_BASE_URL}/chat/completions" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "adp-qwen35-4b-flashattn-ckpt1000",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the weather in Pittsburgh? Use the weather tool."
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "get_weather",
+          "description": "Get current weather for a city",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "city": { "type": "string" },
+              "unit": {
+                "type": "string",
+                "enum": ["celsius", "fahrenheit"]
+              }
+            },
+            "required": ["city"],
+            "additionalProperties": false
+          }
+        }
+      }
+    ],
+    "tool_choice": "required",
+    "chat_template_kwargs": { "enable_thinking": false },
+    "temperature": 0,
+    "max_tokens": 96
+  }' | python3 -m json.tool
+```
+
+The response should have `finish_reason: "tool_calls"` and a non-empty
+`choices[0].message.tool_calls` array.
 
 <!-- @test:id=lemonade-version timeout=60 hidden=True -->
 ```bash
@@ -267,17 +360,35 @@ Click **Next** only after the connection banner reports success.
 
 Open the advanced or all-settings view in the LLM step and use:
 
+For Lemonade:
+
 | Field | Value |
 | --- | --- |
 | Custom model | `openai/Qwen3.6-35B-A3B-GGUF` |
 | Base URL | `http://127.0.0.1:13305/api/v1` |
 | API key | `lemonade` |
 
+For SGLang:
+
+| Field | Value |
+| --- | --- |
+| Custom model | `openai/adp-qwen35-4b-flashattn-ckpt1000` |
+| Base URL | `http://127.0.0.1:13306/v1` |
+| API key | `sglang` |
+| LiteLLM extra body | `{"chat_template_kwargs":{"enable_thinking":false}}` |
+
 Why the `openai/` prefix? Agent Canvas talks to local OpenAI-compatible
 servers through LiteLLM. The prefix tells LiteLLM to use OpenAI-compatible
-request formatting, while the base URL redirects the request to Lemonade.
+request formatting, while the base URL redirects the request to the local LLM
+server.
 
-If Agent Server cannot reach `127.0.0.1:13305`, use your tunnel URL instead:
+For the SGLang Qwen3-style checkpoint, keep `enable_thinking` disabled through
+`chat_template_kwargs` when using OpenAI tools. In testing, leaving thinking
+enabled produced tagged tool-call text in `reasoning_content`; disabling it
+made SGLang return parsed OpenAI `message.tool_calls`.
+
+If Agent Server cannot reach the local model server at `127.0.0.1:13305`
+or `127.0.0.1:13306`, use your tunnel URL instead:
 
 ```text
 https://YOUR_NGROK_DOMAIN.ngrok-free.dev/api/v1
@@ -438,7 +549,7 @@ http://localhost:8000/automations
 
 ## Troubleshooting
 
-### Agent Canvas Cannot Reach Lemonade
+### Agent Canvas Cannot Reach the Local LLM Server
 
 Verify the model server:
 
@@ -447,12 +558,21 @@ curl -fsS "${LEMONADE_BASE_URL}/health"
 curl -fsS "${LEMONADE_BASE_URL}/models"
 ```
 
+For SGLang, use:
+
+```bash
+curl -fsS "http://127.0.0.1:13306/health"
+curl -fsS "${SGLANG_BASE_URL}/models"
+```
+
 If Agent Server runs on a different machine or in a remote sandbox, replace
 `127.0.0.1` with a reachable host or HTTPS tunnel.
 
-### The Model Selector Does Not Show Lemonade
+### The Model Selector Does Not Show the Local Model
 
 Use the advanced LLM settings form and enter:
+
+For Lemonade:
 
 ```text
 Model: openai/Qwen3.6-35B-A3B-GGUF
@@ -460,8 +580,17 @@ Base URL: http://127.0.0.1:13305/api/v1
 API key: lemonade
 ```
 
-The API key is a placeholder for local Lemonade, but many OpenAI-compatible
-clients require the field to be non-empty.
+For SGLang:
+
+```text
+Model: openai/adp-qwen35-4b-flashattn-ckpt1000
+Base URL: http://127.0.0.1:13306/v1
+API key: sglang
+LiteLLM extra body: {"chat_template_kwargs":{"enable_thinking":false}}
+```
+
+The API key is a placeholder for local Lemonade or SGLang, but many
+OpenAI-compatible clients require the field to be non-empty.
 
 ### GitHub MCP Cannot See Private Repositories
 
