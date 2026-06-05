@@ -107,7 +107,7 @@ only the reporting destination.
 export LEMONADE_BASE_URL="http://127.0.0.1:13305/api/v1"
 export LEMONADE_MODEL="Qwen3.6-35B-A3B-GGUF"
 export SGLANG_BASE_URL="http://127.0.0.1:13306/v1"
-export SGLANG_MODEL="adp-qwen35-4b-flashattn-ckpt1000"
+export SGLANG_MODEL="Qwen3-8B"
 export AGENT_CANVAS_URL="http://localhost:8000"
 export AUTOMATION_API_URL="http://localhost:8000/api/automation"
 export GITHUB_REPO_FILTER="your-org/*"
@@ -127,8 +127,9 @@ Lemonade on `127.0.0.1:13305`, with the loaded model
 `Qwen3.6-35B-A3B-GGUF`, a llama.cpp Vulkan backend, and a 65,536-token context.
 
 If you use SGLang instead of Lemonade, this playbook was also verified with
-SGLang on `127.0.0.1:13306`, serving
-`adp-qwen35-4b-flashattn-ckpt1000` with a 32,768-token context.
+SGLang on `127.0.0.1:13306`, serving `Qwen3-8B` with an 8,192-token context.
+See the SGLang section below for the 35B SGLang status and the exact tool-call
+verification.
 
 ## 1. Start Lemonade Server
 
@@ -178,15 +179,15 @@ export HIP_VISIBLE_DEVICES=0
 export PYTHONPATH="$HOME/work/sglang/python:${PYTHONPATH:-}"
 
 python -u -m sglang.launch_server \
-  --model-path "$HOME/work/models/adp-qwen35-4b-flashattn-ckpt1000" \
+  --model-path "Qwen/Qwen3-8B" \
   --host 127.0.0.1 \
   --port 13306 \
   --served-model-name "${SGLANG_MODEL}" \
   --dtype bfloat16 \
-  --context-length 32768 \
-  --max-total-tokens 32768 \
+  --context-length 8192 \
+  --max-total-tokens 8192 \
   --max-running-requests 1 \
-  --mem-fraction-static 0.75 \
+  --mem-fraction-static 0.55 \
   --attention-backend torch_native \
   --grammar-backend xgrammar \
   --reasoning-parser qwen3 \
@@ -210,7 +211,7 @@ instead of populating `message.tool_calls`.
 curl -fsS "${SGLANG_BASE_URL}/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "adp-qwen35-4b-flashattn-ckpt1000",
+    "model": "Qwen3-8B",
     "messages": [
       {
         "role": "user",
@@ -247,6 +248,68 @@ curl -fsS "${SGLANG_BASE_URL}/chat/completions" \
 
 The response should have `finish_reason: "tool_calls"` and a non-empty
 `choices[0].message.tool_calls` array.
+
+### SGLang 35B Status on a 32 GB ROCm GPU
+
+SGLang was not demonstrated with `qwen3.6-35b-a3b` on this 32 GB GPU. The
+35B Lemonade path above uses `Qwen3.6-35B-A3B-GGUF`, but the SGLang path was
+verified with the larger practical fallback `Qwen3-8B`.
+
+The attempted SGLang 35B AWQ command used
+`mattbucci/Qwen3.6-35B-A3B-AWQ` with `--quantization awq`,
+`--context-length 4096`, `--max-total-tokens 4096`,
+`--max-running-requests 1`, `--mem-fraction-static 0.50`,
+`--grammar-backend xgrammar`, `--reasoning-parser qwen3`, and
+`--tool-call-parser qwen`. It failed before the OpenAI API became ready with:
+
+```text
+torch.OutOfMemoryError: HIP out of memory. Tried to allocate 1024.00 MiB.
+GPU 0 has a total capacity of 32.00 GiB of which 944.00 MiB is free.
+Of the allocated memory 30.70 GiB is allocated by PyTorch.
+```
+
+A second SGLang 35B AWQ attempt added `--cpu-offload-gb 8` and lowered
+`--mem-fraction-static` to `0.40`. It also failed during model initialization:
+
+```text
+torch.OutOfMemoryError: HIP out of memory. Tried to allocate 1024.00 MiB.
+GPU 0 has a total capacity of 32.00 GiB of which 238.00 MiB is free.
+Of the allocated memory 31.20 GiB is allocated by PyTorch.
+```
+
+The verified SGLang fallback was `Qwen/Qwen3-8B` served as `Qwen3-8B`.
+`/v1/models` returned:
+
+```json
+{
+  "id": "Qwen3-8B",
+  "max_model_len": 8192
+}
+```
+
+The tool-call check above returned:
+
+```json
+{
+  "model": "Qwen3-8B",
+  "finish_reason": "tool_calls",
+  "content": "",
+  "reasoning_content": null,
+  "tool_calls": [
+    {
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "arguments": "{\"city\": \"Pittsburgh\", \"unit\": \"fahrenheit\"}"
+      }
+    }
+  ]
+}
+```
+
+This proves the SGLang endpoint can return parsed OpenAI
+`message.tool_calls`, which is the tool-call shape Agent Canvas receives
+through LiteLLM.
 
 <!-- @test:id=lemonade-version timeout=60 hidden=True -->
 ```bash
@@ -372,7 +435,7 @@ For SGLang:
 
 | Field | Value |
 | --- | --- |
-| Custom model | `openai/adp-qwen35-4b-flashattn-ckpt1000` |
+| Custom model | `openai/Qwen3-8B` |
 | Base URL | `http://127.0.0.1:13306/v1` |
 | API key | `sglang` |
 | LiteLLM extra body | `{"chat_template_kwargs":{"enable_thinking":false}}` |
@@ -583,7 +646,7 @@ API key: lemonade
 For SGLang:
 
 ```text
-Model: openai/adp-qwen35-4b-flashattn-ckpt1000
+Model: openai/Qwen3-8B
 Base URL: http://127.0.0.1:13306/v1
 API key: sglang
 LiteLLM extra body: {"chat_template_kwargs":{"enable_thinking":false}}
