@@ -58,7 +58,13 @@ own AMD system.
 You need:
 
 - Lemonade Server installed.
-- Agent Canvas checked out locally.
+- Agent Canvas checked out locally, using a recent `main` checkout.
+- A recent OpenHands Agent Server / `software-agent-sdk` build with
+  schema-driven agent settings, `LLMSummarizingCondenserSettings.max_tokens`,
+  and LLM `custom_tokenizer` support.
+- The Python `transformers` package available in the Agent Server environment.
+  It is required for chat-template token counting when `custom_tokenizer` is
+  set.
 - A GitHub token with read access to the repository you want summarized.
 - A Slack bot token (`xoxb-...`) with `chat:write` and channel read access.
 - A Slack team ID (`T...`).
@@ -75,6 +81,8 @@ Invite the Slack app to the target channel before testing the automation.
 ```bash
 export LEMONADE_BASE_URL="http://127.0.0.1:13305/api/v1"
 export LEMONADE_MODEL="Qwen3.6-35B-A3B-GGUF"
+export QWEN_CUSTOM_TOKENIZER="Qwen/Qwen3.6-35B-A3B"
+export CONDENSER_MAX_TOKENS="56000"
 export AGENT_CANVAS_URL="http://localhost:8000"
 export AUTOMATION_API_URL="http://localhost:8000/api/automation"
 export GITHUB_REPO_FILTER="your-org/your-repo"
@@ -171,7 +179,9 @@ Agent Canvas shows a first-run onboarding modal.
 
 ### Choose Agent
 
-Select **OpenHands**.
+Select **OpenHands**. Do not choose an ACP subprocess agent for this playbook:
+the OpenHands agent settings page is where the Lemonade LLM, Qwen tokenizer, and
+condenser threshold are configured.
 
 ![Agent Canvas onboarding screen with OpenHands selected](screenshots/01-onboarding-choose-agent.png)
 
@@ -183,18 +193,77 @@ Confirm the local Agent Server is connected, then click **Next**.
 
 ### Set Up LLM
 
-Open the advanced LLM settings and use:
+Open the advanced LLM settings. If the tokenizer or extra-body fields are not
+visible, switch the settings view to **All**. Use:
 
 | Field | Value |
 | --- | --- |
 | Custom model | `openai/Qwen3.6-35B-A3B-GGUF` |
 | Base URL | `http://127.0.0.1:13305/api/v1` |
 | API key | `lemonade` or your `LEMONADE_API_KEY` value |
+| Custom tokenizer | `Qwen/Qwen3.6-35B-A3B` |
+| LiteLLM extra body | `{"enable_thinking":true}` |
 
 The `openai/` prefix tells LiteLLM to use OpenAI-compatible request formatting
-against the Lemonade endpoint. Click **Next** to save the profile.
+against the Lemonade endpoint. The custom tokenizer is the original Hugging Face
+tokenizer for the GGUF model; it lets OpenHands count the same chat-template
+tokens that the local model server sees. If you use a Qwen3.5 GGUF instead,
+switch this to the matching non-GGUF tokenizer repository, for example
+`Qwen/Qwen3.5-35B-A3B`.
+
+The `enable_thinking` value is forwarded to Lemonade through LiteLLM so Qwen can
+use its thinking mode. Click **Next** to save the profile.
 
 ![Agent Canvas LLM profile configured for Lemonade](screenshots/03-llm-profile-configured.png)
+
+### Configure the Condenser
+
+Open the condenser settings page:
+
+```text
+http://localhost:8000/settings/condenser
+```
+
+Switch to **All** settings and use:
+
+| Field | Value |
+| --- | --- |
+| Enable memory condensation | On |
+| Condenser kind | `llm_summarizing` |
+| Max tokens | `56000` |
+
+With Lemonade configured for a 65,536-token context window, a 56,000-token
+condenser threshold leaves headroom for tool schemas, chat-template overhead,
+and the next model response. The condenser uses the agent LLM's
+chat-template-aware token count, so `custom_tokenizer` and `max_tokens` should be
+set together.
+
+If your Agent Canvas build does not expose these fields yet, apply the same
+settings through the Agent Server settings endpoint:
+
+```bash
+curl -sS -X PATCH "${AGENT_CANVAS_URL}/api/settings" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_settings_diff": {
+      "agent_kind": "openhands",
+      "llm": {
+        "model": "openai/'"${LEMONADE_MODEL}"'",
+        "base_url": "'"${LEMONADE_BASE_URL}"'",
+        "api_key": "lemonade",
+        "custom_tokenizer": "'"${QWEN_CUSTOM_TOKENIZER}"'",
+        "litellm_extra_body": {
+          "enable_thinking": true
+        }
+      },
+      "condenser": {
+        "enabled": true,
+        "condenser_kind": "llm_summarizing",
+        "max_tokens": '"${CONDENSER_MAX_TOKENS}"'
+      }
+    }
+  }' | python3 -m json.tool
+```
 
 ### Finish Onboarding
 
@@ -303,13 +372,23 @@ channel should contain the digest.
 
 - **Agent Canvas cannot reach Lemonade:** verify `curl -fsS "${LEMONADE_BASE_URL}/health"`
   and confirm the base URL in the LLM profile matches Lemonade.
+- **Saving the LLM settings fails after setting a custom tokenizer:** install
+  `transformers` in the Agent Server environment, restart Agent Server, and save
+  again. OpenHands requires Transformers to load the tokenizer chat template
+  when `custom_tokenizer` is set.
+- **The custom tokenizer or condenser token threshold is not visible:** use the
+  **All** settings view on `/settings/llm` and `/settings/condenser`, or apply
+  the `PATCH /api/settings` payload shown above.
 - **Slack can read channels but cannot post:** invite the Slack app to the target
   channel and confirm the bot has `chat:write`.
 - **The automation lists too many channels:** use a Slack channel ID and set
   `SLACK_CHANNEL_IDS` on the Slack MCP server.
-- **The automation exceeds context:** use an explicit repository, cap GitHub
-  result sets to 3 to 5 items, and create a new prompt automation after changing
-  from a broad repo filter to a narrow one.
+- **The automation exceeds context:** confirm Lemonade was started with
+  `ctx_size=65536`, confirm the OpenHands LLM has `custom_tokenizer` set, and
+  confirm the condenser has `max_tokens` set below the Lemonade context window.
+  Also use an explicit repository, cap GitHub result sets to 3 to 5 items, and
+  create a new prompt automation after changing from a broad repo filter to a
+  narrow one.
 
 ## Next Steps
 
