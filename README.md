@@ -15,12 +15,13 @@ SPDX-License-Identifier: MIT
 
 ## Overview
 
-Software engineering is full of repetitive tasks that still require context,
-judgment, and careful follow-through. Automations are useful whenever a team
-repeats the same context-gathering, decision, and notification loop: checking
-activity, summarizing changes, triaging issues, monitoring health signals, or
-posting updates. They reduce manual polling, make handoffs more consistent, and
-let important work run on a schedule or in response to events.
+Shared OpenHands automation templates cover recurring engineering workflows
+such as reviewing labeled GitHub pull requests, monitoring repository comments
+for `@OpenHands` mentions, triaging new Linear issues, drafting incident
+retrospectives from Slack and issue updates, and writing standup or research
+digests. These tasks follow the same pattern: watch a source on a schedule or
+event, gather context through integrations, make a judgment, and post a concise
+update back to the team.
 
 [OpenHands automations](https://docs.openhands.dev/openhands/usage/automations/overview)
 run these workflows as full agent conversations with access to your configured
@@ -34,8 +35,7 @@ In this playbook, you will build one concrete automation: a scheduled
 GitHub-to-Slack development digest powered by Agent Canvas, GitHub and Slack MCP
 servers, and a local model served by Lemonade Server. Because the model runs
 locally through an OpenAI-compatible API, the workflow context and prompt stay
-on your AMD system. SGLang is also covered as an optional local endpoint when
-you need grammar-constrained OpenAI tool calling.
+on your AMD system.
 
 ![Architecture diagram showing GitHub MCP, OpenHands automation, Lemonade Server, and Slack MCP](screenshots/00-architecture-overview.png)
 
@@ -83,9 +83,6 @@ export LEMONADE_BASE_URL="http://127.0.0.1:13305/api/v1"
 export LEMONADE_MODEL="Qwen3.6-35B-A3B-GGUF"
 export QWEN_CUSTOM_TOKENIZER="Qwen/Qwen3.6-35B-A3B"
 export CONDENSER_MAX_TOKENS="56000"
-
-export SGLANG_BASE_URL="http://127.0.0.1:13306/v1"
-export SGLANG_MODEL="Qwen3-8B"
 
 export AGENT_CANVAS_URL="http://localhost:8000"
 export AGENT_SERVER_API_URL="http://127.0.0.1:18000/api"
@@ -186,93 +183,7 @@ curl -sS "${LEMONADE_BASE_URL}/chat/completions" \
 
 If this returns a `choices` array, Lemonade is ready for Agent Canvas.
 
-## 3. Optional: Use SGLang for Tool Calls
-
-SGLang is a useful fallback when the automation depends heavily on OpenAI
-`tools`. Launch SGLang with an explicit grammar backend, Qwen reasoning parser,
-Qwen tool-call parser, and strict tool decoding:
-
-```bash
-cd ~/work/sglang
-source ~/.venvs/sglang-rocm/bin/activate
-
-export SGLANG_TOOL_STRICT_LEVEL=2
-export HIP_VISIBLE_DEVICES=0
-export PYTHONPATH="$HOME/work/sglang/python:${PYTHONPATH:-}"
-
-python -u -m sglang.launch_server \
-  --model-path "Qwen/Qwen3-8B" \
-  --host 127.0.0.1 \
-  --port 13306 \
-  --served-model-name "${SGLANG_MODEL}" \
-  --dtype bfloat16 \
-  --context-length 8192 \
-  --max-total-tokens 8192 \
-  --max-running-requests 1 \
-  --mem-fraction-static 0.55 \
-  --attention-backend torch_native \
-  --grammar-backend xgrammar \
-  --reasoning-parser qwen3 \
-  --tool-call-parser qwen \
-  --disable-cuda-graph \
-  --disable-custom-all-reduce
-```
-
-Verify parsed OpenAI tool calls:
-
-```bash
-curl -fsS "${SGLANG_BASE_URL}/chat/completions" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "Qwen3-8B",
-    "messages": [
-      {
-        "role": "user",
-        "content": "What is the weather in Pittsburgh? Use the weather tool."
-      }
-    ],
-    "tools": [
-      {
-        "type": "function",
-        "function": {
-          "name": "get_weather",
-          "description": "Get current weather for a city",
-          "parameters": {
-            "type": "object",
-            "properties": {
-              "city": { "type": "string" },
-              "unit": {
-                "type": "string",
-                "enum": ["celsius", "fahrenheit"]
-              }
-            },
-            "required": ["city"],
-            "additionalProperties": false
-          }
-        }
-      }
-    ],
-    "tool_choice": "required",
-    "chat_template_kwargs": { "enable_thinking": false },
-    "temperature": 0,
-    "max_tokens": 96
-  }' | python3 -m json.tool
-```
-
-The response should have `finish_reason: "tool_calls"` and a non-empty
-`choices[0].message.tool_calls` array. The
-`chat_template_kwargs.enable_thinking=false` setting is important for this
-Qwen3-style checkpoint; without it, SGLang can return tagged tool-call text in
-`reasoning_content` instead of parsed OpenAI `message.tool_calls`.
-
-SGLang was not demonstrated with `qwen3.6-35b-a3b` on a 32 GB GPU. The 35B
-Lemonade path uses `Qwen3.6-35B-A3B-GGUF`, while the verified SGLang fallback
-was `Qwen/Qwen3-8B` served as `Qwen3-8B`. Attempts to run
-`mattbucci/Qwen3.6-35B-A3B-AWQ` with AWQ quantization, a 4,096-token context,
-and `--mem-fraction-static` between `0.40` and `0.50` failed during model
-initialization with HIP out-of-memory errors on a 32 GB ROCm GPU.
-
-## 4. Start Agent Canvas
+## 3. Start Agent Canvas
 
 From the Agent Canvas checkout:
 
@@ -302,7 +213,7 @@ playbook uses backend API calls.
 
 ![Agent Canvas onboarding backend connection success](screenshots/02-onboarding-backend-connected.png)
 
-## 5. Configure Agent Server Through the API
+## 4. Configure Agent Server Through the API
 
 First switch Agent Server to the OpenHands agent. This is a separate call so a
 previous ACP configuration does not get deep-merged into the OpenHands settings
@@ -378,7 +289,7 @@ chat-template tokens that the local model server sees.
 
 ![Agent Canvas home after onboarding](screenshots/05-agent-canvas-home.png)
 
-## 6. Install GitHub and Slack MCP Servers
+## 5. Install GitHub and Slack MCP Servers
 
 Configure MCP servers through `PATCH /api/settings`. The token values are sent
 only to the local Agent Server and are persisted as encrypted settings.
@@ -443,7 +354,7 @@ curl -sS -X POST "${AGENT_SERVER_API_URL}/mcp/test" \
 
 ![Agent Canvas MCP page with GitHub and Slack servers installed](screenshots/04-mcp-servers-installed.png)
 
-## 7. Create the Digest Automation
+## 6. Create the Digest Automation
 
 Use the automation prompt preset endpoint directly:
 
@@ -476,7 +387,7 @@ generated prompt-preset entrypoint.
 
 ![Agent Canvas automation detail after creation](screenshots/06-automation-created.png)
 
-## 8. Test the Automation
+## 7. Test the Automation
 
 Run the automation once:
 
@@ -527,10 +438,6 @@ channel should contain the digest.
   `ctx_size=65536`, confirm the OpenHands LLM has `custom_tokenizer` set, and
   confirm the condenser has `max_tokens` set below the Lemonade context window.
   Also use an explicit repository and cap GitHub result sets to 3 to 5 items.
-- **SGLang returns tool text instead of OpenAI tool calls:** include
-  `"chat_template_kwargs":{"enable_thinking":false}` in LiteLLM extra body when
-  using Qwen3 with SGLang tools.
-
 ## Next Steps
 
 - Add a weekly release-only digest.
