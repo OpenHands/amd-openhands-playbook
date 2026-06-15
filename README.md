@@ -15,26 +15,37 @@ SPDX-License-Identifier: MIT
 
 ## Overview
 
-Software engineering is full of repetitive tasks that still require context,
-judgment, and careful follow-through. Automations are useful whenever a team
-repeats the same context-gathering, decision, and notification loop: checking
-activity, summarizing changes, triaging issues, monitoring health signals, or
-posting updates. They reduce manual polling, make handoffs more consistent, and
-let important work run on a schedule or in response to events.
+Developers spend a lot of time on small recurring loops: reviewing labeled
+pull requests, answering GitHub comments, triaging new issues, turning Slack
+threads into standup notes or incident follow-ups, and tracking release or
+research signals. Each loop is familiar, but it still requires judgment:
+gather the right context, decide what matters, and post a clear update where
+the team already works.
 
 [OpenHands automations](https://docs.openhands.dev/openhands/usage/automations/overview)
-run these workflows as full agent conversations with access to your configured
-LLM, stored secrets, tools, and integrations.
-[Agent Canvas](https://github.com/OpenHands/agent-canvas) provides a local,
-self-hostable UI and backend stack for connecting an OpenHands agent server,
-configuring the LLM, installing MCP servers, and creating or testing
-automations.
+turn those loops into scheduled or event-triggered agent conversations: runs
+where an AI software agent can read context, call tools, and produce an update.
+The shared automation templates in the OpenHands extensions catalog follow
+this pattern for GitHub pull request review, repository monitoring, Linear
+issue triage, incident retrospectives, Slack standup digests, and research
+briefs: an automation wakes up, uses configured integrations such as GitHub or
+Slack to fetch context, reasons over that context with a large language model
+(LLM), and writes back a result.
+
+[Agent Canvas](https://github.com/OpenHands/agent-canvas) is the local control
+plane for building and testing those automations. In this playbook it runs an
+OpenHands Agent Server, the backend process that executes agent conversations,
+and connects the agent to external services such as GitHub and Slack.
+
+To keep the workflow on your AMD system, the agent talks to a local model
+served by Lemonade Server. Lemonade exposes that model through an
+OpenAI-compatible API, so Agent Canvas can configure it like a remote
+OpenAI-style endpoint while the model, prompt, and workflow context stay local.
 
 In this playbook, you will build one concrete automation: a scheduled
-GitHub-to-Slack development digest powered by Agent Canvas, GitHub and Slack MCP
-servers, and a local model served by Lemonade Server. Because the model runs
-locally through an OpenAI-compatible API, the workflow context and prompt stay
-on your AMD system.
+GitHub-to-Slack development digest. It uses GitHub to inspect recent repository
+activity, Slack to post the digest, Agent Canvas API calls to configure and
+test the automation, and Lemonade to run the LLM locally.
 
 ![Architecture diagram showing GitHub MCP, OpenHands automation, Lemonade Server, and Slack MCP](screenshots/00-architecture-overview.png)
 
