@@ -175,6 +175,10 @@ The `agent-canvas` command starts the agent server, the automation backend, and
 the web frontend together. You only need this one command to run OpenHands
 locally.
 
+![Agent Canvas onboarding screen with OpenHands selected](assets/01-onboarding-choose-agent.png)
+
+![Agent Canvas onboarding backend connection success](assets/02-onboarding-backend-connected.png)
+
 <!-- @os:windows -->
 <!-- @test:id=agent-canvas-installed-windows timeout=120 hidden=True -->
 ```powershell
@@ -225,6 +229,8 @@ In the Agent Canvas UI:
 
 You can switch profiles later from the chat input with the `/model` command.
 
+![Agent Canvas LLM profile configured for Lemonade](assets/03-llm-profile-configured.png)
+
 ## 5. Open a Workspace
 
 The agent can only read and modify files inside a workspace you choose. Before
@@ -237,6 +243,8 @@ starting a task, point Agent Canvas at your project folder:
 
 Everything the agent does—reading files, running commands, editing code—is
 scoped to that workspace.
+
+![Agent Canvas home after onboarding](assets/04-agent-canvas-home.png)
 
 ## 6. Run Your First Coding Task
 
