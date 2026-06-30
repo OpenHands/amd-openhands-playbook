@@ -225,11 +225,6 @@ In the Agent Canvas UI:
 
 You can switch profiles later from the chat input with the `/model` command.
 
-The `openai/` prefix is not needed in the UI because you are selecting an
-OpenAI-compatible provider directly. If you ever configure the same endpoint
-through the Agent Server API instead, use the model string
-`openai/Qwen3.6-35B-A3B-GGUF` so LiteLLM formats requests correctly.
-
 ## 5. Open a Workspace
 
 The agent can only read and modify files inside a workspace you choose. Before
