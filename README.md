@@ -113,12 +113,12 @@ export LEMONADE_BASE_URL="http://127.0.0.1:13305/api/v1"
 export LEMONADE_MODEL="Qwen3.6-35B-A3B-GGUF"
 export QWEN_CUSTOM_TOKENIZER="Qwen/Qwen3.6-35B-A3B"
 export CONDENSER_MAX_TOKENS="56000"
+```
 
-export AGENT_CANVAS_URL="http://localhost:8000"
-export AGENT_SERVER_API_URL="http://127.0.0.1:18000/api"
-export AUTOMATION_API_URL="http://127.0.0.1:18001/api/automation"
-export AGENT_CANVAS_API_KEY="$(cat ~/.openhands/agent-canvas/api-key.txt)"
+The following values are entered into the Agent Canvas UI in later steps. Set
+them here so you can copy them in:
 
+```bash
 export GITHUB_REPO_FILTER="your-org/your-repo"
 export SLACK_DIGEST_CHANNEL="C0123456789"
 export DIGEST_TIMEZONE="America/New_York"
@@ -126,11 +126,6 @@ export DIGEST_TIMEZONE="America/New_York"
 
 Use an explicit `owner/repo` value for `GITHUB_REPO_FILTER`. Broad organization
 wildcards can return too much MCP context for local models.
-
-Agent Canvas local development uses one session key for both local backends:
-send it as `X-Session-API-Key` to Agent Server, and as
-`Authorization: Bearer ...` to the automation backend. The key is stored at
-`~/.openhands/agent-canvas/api-key.txt`.
 
 ## 1. Start Lemonade Server
 
@@ -215,91 +210,46 @@ If this returns a `choices` array, Lemonade is ready for Agent Canvas.
 
 ## 3. Start Agent Canvas
 
-From the Agent Canvas checkout:
+Install the published Agent Canvas package and start the full stack:
 
 ```bash
-cd ~/work/agent-canvas
-npm ci
-npm run dev
+npm install -g @openhands/agent-canvas
+agent-canvas
 ```
 
-The default development launcher starts:
+By default, Agent Canvas starts on `http://localhost:8000`. Open that URL in
+your browser. The default local backend should show as healthy on the home
+screen.
 
-- Agent Server on port `18000`
-- Automation backend on port `18001`
-- Frontend on port `3001`
-- Ingress proxy on port `8000`
-
-Open Agent Canvas if you want to inspect the result visually:
-
-```text
-http://localhost:8000
-```
-
-The screenshots below show the equivalent frontend state, but the setup in this
-playbook uses backend API calls.
+The `agent-canvas` command starts the agent server, the automation backend, and
+the web frontend together. You only need this one command to run OpenHands
+locally. The rest of this playbook configures everything through the Agent
+Canvas UI in your browser.
 
 ![Agent Canvas onboarding screen with OpenHands selected](screenshots/01-onboarding-choose-agent.png)
 
 ![Agent Canvas onboarding backend connection success](screenshots/02-onboarding-backend-connected.png)
 
-## 4. Configure Agent Server Through the API
+## 4. Configure the Local LLM in the UI
 
-First switch Agent Server to the OpenHands agent. This is a separate call so a
-previous ACP configuration does not get deep-merged into the OpenHands settings
-variant:
+In the Agent Canvas UI, open **Settings > LLM** and configure the local
+Lemonade model:
 
-```bash
-curl -sS -X PATCH "${AGENT_SERVER_API_URL}/settings" \
-  -H "X-Session-API-Key: ${AGENT_CANVAS_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agent_settings_diff": {
-      "agent_kind": "openhands"
-    }
-  }' | python3 -m json.tool
-```
+1. For the **Agent**, choose **OpenHands**.
+2. For the **Provider**, choose **OpenAI-compatible** (or **Other /
+   OpenAI-compatible**).
+3. Set **Base URL** to `http://127.0.0.1:13305/api/v1`.
+4. Set **Model** to `openai/Qwen3.6-35B-A3B-GGUF`.
+5. For the **API key**, enter any non-empty string such as `lemonade`. Lemonade
+   does not require a real key, but the OpenHands client needs a value to send.
+6. Set **Custom tokenizer** to `Qwen/Qwen3.6-35B-A3B`.
+7. Under **Advanced**, set the LiteLLM extra body to
+   `{"enable_thinking": true}`.
+8. Enable the **condenser**, set its kind to `llm_summarizing`, and set
+   **max tokens** to `56000`.
+9. Save the profile so you can reuse it. Give it a name like `Lemonade local`.
 
-Then configure Lemonade, the Qwen tokenizer, and the condenser:
-
-```bash
-curl -sS -X PATCH "${AGENT_SERVER_API_URL}/settings" \
-  -H "X-Session-API-Key: ${AGENT_CANVAS_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agent_settings_diff": {
-      "llm": {
-        "model": "openai/'"${LEMONADE_MODEL}"'",
-        "base_url": "'"${LEMONADE_BASE_URL}"'",
-        "api_key": "lemonade",
-        "custom_tokenizer": "'"${QWEN_CUSTOM_TOKENIZER}"'",
-        "litellm_extra_body": {
-          "enable_thinking": true
-        }
-      },
-      "condenser": {
-        "enabled": true,
-        "condenser_kind": "llm_summarizing",
-        "max_tokens": '"${CONDENSER_MAX_TOKENS}"'
-      }
-    },
-    "conversation_settings_diff": {
-      "confirmation_mode": false,
-      "max_iterations": 20
-    },
-    "active_profile": null
-  }' | python3 -m json.tool
-```
-
-Verify the saved settings without exposing secrets:
-
-```bash
-curl -sS "${AGENT_SERVER_API_URL}/settings" \
-  -H "X-Session-API-Key: ${AGENT_CANVAS_API_KEY}" \
-  | python3 -m json.tool
-```
-
-The LLM profile should show:
+The saved LLM profile should show:
 
 | Field | Value |
 | --- | --- |
@@ -321,122 +271,94 @@ chat-template tokens that the local model server sees.
 
 ## 5. Install GitHub and Slack MCP Servers
 
-Configure MCP servers through `PATCH /api/settings`. The token values are sent
-only to the local Agent Server and are persisted as encrypted settings.
+In the Agent Canvas UI, open **Customize** (or **Settings > MCP**) to add the
+MCP servers that give the agent tools for GitHub and Slack. Token values are
+sent only to your local Agent Server and are persisted as encrypted settings.
 
-```bash
-export GITHUB_PERSONAL_ACCESS_TOKEN="YOUR_GITHUB_TOKEN"
-export SLACK_BOT_TOKEN="xoxb-..."
-export SLACK_TEAM_ID="T0123456789"
-export SLACK_CHANNEL_IDS="${SLACK_DIGEST_CHANNEL}"
+### GitHub MCP server
 
-curl -sS -X PATCH "${AGENT_SERVER_API_URL}/settings" \
-  -H "X-Session-API-Key: ${AGENT_CANVAS_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agent_settings_diff": {
-      "mcp_config": {
-        "mcpServers": {
-          "github": {
-            "command": "npx",
-            "args": ["-y", "@modelcontextprotocol/server-github"],
-            "env": {
-              "GITHUB_PERSONAL_ACCESS_TOKEN": "'"${GITHUB_PERSONAL_ACCESS_TOKEN}"'"
-            }
-          },
-          "slack": {
-            "command": "npx",
-            "args": ["-y", "@modelcontextprotocol/server-slack"],
-            "env": {
-              "SLACK_BOT_TOKEN": "'"${SLACK_BOT_TOKEN}"'",
-              "SLACK_TEAM_ID": "'"${SLACK_TEAM_ID}"'",
-              "SLACK_CHANNEL_IDS": "'"${SLACK_CHANNEL_IDS}"'"
-            }
-          }
-        }
-      }
-    }
-  }' | python3 -m json.tool
-```
+Add a new MCP server with these settings:
 
-Set `SLACK_CHANNEL_IDS` to the digest channel ID so the agent does not need to
-page through every Slack channel.
+| Field | Value |
+| --- | --- |
+| Name | `github` |
+| Command | `npx` |
+| Args | `-y @modelcontextprotocol/server-github` |
+| Env | `GITHUB_PERSONAL_ACCESS_TOKEN` = your GitHub token |
 
-You can test one MCP server before running the automation:
+Use a GitHub token with read access to the repository you want summarized.
 
-```bash
-curl -sS -X POST "${AGENT_SERVER_API_URL}/mcp/test" \
-  -H "X-Session-API-Key: ${AGENT_CANVAS_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "github",
-    "timeout": 60,
-    "server": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "'"${GITHUB_PERSONAL_ACCESS_TOKEN}"'"
-      }
-    }
-  }' | python3 -m json.tool
-```
+### Slack MCP server
+
+Add a second MCP server with these settings:
+
+| Field | Value |
+| --- | --- |
+| Name | `slack` |
+| Command | `npx` |
+| Args | `-y @modelcontextprotocol/server-slack` |
+| Env | `SLACK_BOT_TOKEN` = `xoxb-...` |
+| Env | `SLACK_TEAM_ID` = `T0123456789` |
+| Env | `SLACK_CHANNEL_IDS` = your digest channel ID |
+
+Set `SLACK_CHANNEL_IDS` to the digest channel ID (the same value as
+`SLACK_DIGEST_CHANNEL`) so the agent does not need to page through every Slack
+channel.
+
+After adding both servers, use the **Test** button on each one to confirm it
+connects and advertises tools. The GitHub server should list GitHub tools, and
+the Slack server should list Slack tools.
 
 ![Agent Canvas MCP page with GitHub and Slack servers installed](screenshots/04-mcp-servers-installed.png)
 
 ## 6. Create the Digest Automation
 
-Use the automation prompt preset endpoint directly:
+In the Agent Canvas UI, open the **Automations** page and create a new
+automation:
 
-```bash
-CREATE_RESPONSE="$(
-  curl -sS -X POST "${AUTOMATION_API_URL}/v1/preset/prompt" \
-    -H "Authorization: Bearer ${AGENT_CANVAS_API_KEY}" \
-    -H "Content-Type: application/json" \
-    -d '{
-      "name": "GitHub Development Digest to Slack",
-      "prompt": "Use the GitHub MCP server for exactly one repository: '"${GITHUB_REPO_FILTER}"'. Inspect recent development activity since the previous weekday, including merged pull requests, newly opened or reopened pull requests, notable commits pushed to main or release branches, new issues, important issue updates, releases, risks, blockers, and review requests. Keep GitHub lookups small: inspect the latest 3 to 5 commits, pull requests, issues, and releases. Use the Slack MCP server to post directly to channel ID '"${SLACK_DIGEST_CHANNEL}"'. Keep the Slack message concise: title with date range, 3 to 7 bullets, links back to GitHub, and a Needs attention section only if needed. End with: This digest was generated by an AI agent (OpenHands) on behalf of the user. Do not include secrets, raw tokens, private environment variables, or unrelated Slack messages.",
-      "trigger": {
-        "type": "cron",
-        "schedule": "0 9 * * 1-5",
-        "timezone": "'"${DIGEST_TIMEZONE}"'"
-      },
-      "timeout": 900
-    }'
-)"
+1. Choose **Create automation** and select the **Prompt preset** type.
+2. Set the **Name** to `GitHub Development Digest to Slack`.
+3. Set the **Prompt** to the following text, replacing the repository and
+   channel placeholders with your values:
 
-echo "${CREATE_RESPONSE}" | python3 -m json.tool
-export AUTOMATION_ID="$(
-  python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' \
-    <<< "${CREATE_RESPONSE}"
-)"
-```
+   ```text
+   Use the GitHub MCP server for exactly one repository: your-org/your-repo.
+   Inspect recent development activity since the previous weekday, including
+   merged pull requests, newly opened or reopened pull requests, notable
+   commits pushed to main or release branches, new issues, important issue
+   updates, releases, risks, blockers, and review requests. Keep GitHub
+   lookups small: inspect the latest 3 to 5 commits, pull requests, issues,
+   and releases. Use the Slack MCP server to post directly to channel ID
+   C0123456789. Keep the Slack message concise: title with date range, 3 to 7
+   bullets, links back to GitHub, and a Needs attention section only if
+   needed. End with: This digest was generated by an AI agent (OpenHands) on
+   behalf of the user. Do not include secrets, raw tokens, private
+   environment variables, or unrelated Slack messages.
+   ```
 
-The response includes the new automation ID, the cron trigger, and the
-generated prompt-preset entrypoint.
+4. Set the **Trigger** to **Cron** with the schedule `0 9 * * 1-5` (9 AM on
+   weekdays) and set the **Timezone** to your timezone, for example
+   `America/New_York`.
+5. Set the **Timeout** to `900` seconds.
+6. Save the automation.
+
+The automation detail page shows the new automation with its cron trigger and
+the generated prompt-preset entrypoint.
 
 ![Agent Canvas automation detail after creation](screenshots/06-automation-created.png)
 
 ## 7. Test the Automation
 
-Run the automation once:
+From the automation detail page in the Agent Canvas UI:
 
-```bash
-curl -sS -X POST "${AUTOMATION_API_URL}/v1/${AUTOMATION_ID}/dispatch" \
-  -H "Authorization: Bearer ${AGENT_CANVAS_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{}' | python3 -m json.tool
-```
+1. Click **Run now** (or **Dispatch**) to run the automation once immediately.
+2. Watch the run list on the same page. The latest run should transition to
+   `COMPLETED`.
+3. Open your target Slack channel. It should contain the generated digest.
 
-Check the run status:
-
-```bash
-curl -sS "${AUTOMATION_API_URL}/v1/${AUTOMATION_ID}/runs?limit=5" \
-  -H "Authorization: Bearer ${AGENT_CANVAS_API_KEY}" | python3 -m json.tool
-```
-
-You should see the latest run transition to `COMPLETED`, and the target Slack
-channel should contain the digest.
+You do not need to wait for the cron schedule to fire—**Run now** triggers a
+run on demand so you can confirm the prompt, MCP connections, and Slack posting
+all work before relying on the schedule.
 
 ![Agent Canvas automation run completed successfully](screenshots/08-automation-run-completed.png)
 
@@ -446,28 +368,29 @@ channel should contain the digest.
 
 - **Lemonade is down after a reboot or power outage:** restart it with the
   `setsid -f build/lemond ...` command in step 1, then re-run the health check.
-- **Agent Server rejects the LLM settings after setting `custom_tokenizer`:**
+- **Agent Canvas rejects the LLM settings after setting `custom_tokenizer`:**
   install `transformers` in the Agent Server Python environment, restart Agent
-  Server if needed, and retry the settings patch. OpenHands requires
+  Canvas if needed, and retry saving the LLM profile. OpenHands requires
   Transformers to load the tokenizer chat template when `custom_tokenizer` is
   set.
 - **Agent Canvas cannot reach Lemonade:** verify
-  `curl -fsS "${LEMONADE_BASE_URL}/health"` and confirm the base URL in the
-  Agent Server settings matches the running local endpoint or HTTPS tunnel.
-- **The automation API returns 401:** load
-  `AGENT_CANVAS_API_KEY` from `~/.openhands/agent-canvas/api-key.txt`. Use it
-  as `Authorization: Bearer ...` for the automation backend.
+  `curl -fsS "${LEMONADE_BASE_URL}/health"` and confirm the base URL entered in
+  **Settings > LLM** matches the running local endpoint or HTTPS tunnel.
+- **The LLM profile did not save:** make sure you clicked **Save** after
+  entering the values, and that the profile name is set. Reopen **Settings >
+  LLM** to confirm the values persisted.
 - **GitHub MCP cannot see private repositories:** confirm the GitHub token has
-  read access to the target repository and that the MCP test endpoint advertises
-  GitHub tools.
+  read access to the target repository and that the MCP **Test** button in
+  **Customize** advertises GitHub tools.
 - **Slack can read channels but cannot post:** invite the Slack app to the
   target channel and confirm the bot has `chat:write`.
 - **The automation lists too many Slack channels:** use a Slack channel ID and
-  set `SLACK_CHANNEL_IDS` on the Slack MCP server.
-- **The automation exceeds context:** confirm Lemonade was started with
-  `ctx_size=65536`, confirm the OpenHands LLM has `custom_tokenizer` set, and
-  confirm the condenser has `max_tokens` set below the Lemonade context window.
-  Also use an explicit repository and cap GitHub result sets to 3 to 5 items.
+  set `SLACK_CHANNEL_IDS` on the Slack MCP server in **Customize**.
+- **The automation run fails or exceeds context:** confirm Lemonade was started
+  with `ctx_size=65536`, confirm the OpenHands LLM has `custom_tokenizer` set,
+  and confirm the condenser has `max_tokens` set below the Lemonade context
+  window. Also use an explicit repository and cap GitHub result sets to 3 to 5
+  items.
 
 ## Next Steps
 
