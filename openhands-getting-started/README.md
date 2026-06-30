@@ -319,7 +319,7 @@ the file again—all in the same conversation.
   agent can read issues or post updates while it works.
 - Save several LLM profiles (a fast small model and a stronger large model) and
   switch between them with `/model` mid-conversation.
-- Move on to the [GitHub-to-Slack Development Digest playbook](../README.md) to
+- Move on to the [GitHub-to-Slack Development Digest playbook](../github-slack-development-digest/README.md) to
   turn a recurring loop into a scheduled OpenHands automation.
 
 ## Resources
