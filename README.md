@@ -49,6 +49,26 @@ test the automation, and Lemonade to run the LLM locally.
 
 ![Architecture diagram showing GitHub MCP, OpenHands automation, Lemonade Server, and Slack MCP](screenshots/00-architecture-overview.png)
 
+## What You'll Learn
+
+- How to start Lemonade Server and verify a local model answers chat requests
+- How to launch Agent Canvas and point its Agent Server at a local LLM
+- How to install GitHub and Slack Model Context Protocol (MCP) servers through
+  the Agent Server API
+- How to create and dispatch a scheduled OpenHands automation that posts a
+  development digest to Slack
+- How to troubleshoot the most common local-model and automation failures
+
+## Core Concepts
+
+| Concept | What it is | Where it fits in this playbook |
+| --- | --- | --- |
+| Lemonade Server | A local LLM serving platform built for AMD hardware that exposes an OpenAI-compatible API. Your data never leaves your machine. | Runs the model that powers the agent. |
+| OpenHands Agent Server | The backend process that executes OpenHands agent conversations. | Hosts the agent, its LLM profile, and its MCP servers. |
+| Agent Canvas | The local control plane for OpenHands that runs Agent Server and a UI for inspecting agent runs. | Launches the backends and provides the API you call. |
+| MCP server | A Model Context Protocol server that gives an agent tools for an external service such as GitHub or Slack. | Lets the agent read GitHub and write to Slack. |
+| OpenHands automation | A scheduled or event-triggered agent conversation that fetches context, reasons over it, and writes a result somewhere. | The GitHub-to-Slack digest you build here. |
+
 <!-- @device:stx,krk -->
 > [!NOTE]
 > Coding-agent workflows benefit from a larger model and context window. Use at
@@ -448,6 +468,7 @@ channel should contain the digest.
   `ctx_size=65536`, confirm the OpenHands LLM has `custom_tokenizer` set, and
   confirm the condenser has `max_tokens` set below the Lemonade context window.
   Also use an explicit repository and cap GitHub result sets to 3 to 5 items.
+
 ## Next Steps
 
 - Add a weekly release-only digest.
